@@ -156,10 +156,78 @@ const CSS = `
     .stats-grid { grid-template-columns: 1fr 1fr; }
     .sidebar { width: 60px; }
     .sidebar-logo, .nav-item span, .nav-section, .user-info { display: none; }
-    .main { margin-left: 60px; padding: 24px 16px; }
+    .main { margin-left: 60px; padding: 20px 14px; }
     .grid-2 { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr; }
     .pos-wrap { grid-template-columns: 1fr; }
-    .item-row { grid-template-columns: 1fr 60px 60px 60px 36px; }
+    .item-row { grid-template-columns: 1fr 50px 70px 70px 30px; gap: 4px; }
+    .item-row-header { display: none; }
+    .card { padding: 16px; }
+    .page-title { font-size: 20px; }
+    .stat-value { font-size: 22px; }
+    .tab-row { gap: 6px; flex-wrap: wrap; }
+    .tab-btn { padding: 7px 12px; font-size: 12px; }
+    .btn { padding: 10px 16px; font-size: 13px; }
+    .total-box { padding: 12px 14px; }
+    .total-value { font-size: 20px; }
+    .pos-cart-footer { padding: 12px 14px; }
+    .pos-total { font-size: 22px; }
+    .login-card { width: 95vw; padding: 28px 20px; }
+    table { font-size: 12px; }
+    th, td { padding: 8px 8px; }
+    .btn { min-height: 44px; }
+    .input-field { min-height: 44px; font-size: 16px; }
+  }
+  @media (max-width: 600px) {
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .sidebar { 
+      width: 100%; height: 56px; flex-direction: row; 
+      top: auto; bottom: 0; left: 0; right: 0;
+      border-right: none; border-top: 1px solid var(--border);
+      padding: 0; overflow-x: auto; overflow-y: hidden;
+      justify-content: space-around; align-items: center;
+      z-index: 200;
+    }
+    .sidebar-logo, .nav-section, .user-info, .sidebar-bottom { display: none; }
+    .nav-item { 
+      flex-direction: column; padding: 6px 10px; gap: 2px;
+      border-left: none; border-top: 2px solid transparent;
+      min-width: 52px; justify-content: center; align-items: center;
+      font-size: 10px;
+    }
+    .nav-item span:not(.nav-icon) { display: block; font-size: 9px; color: inherit; }
+    .nav-item.active { border-top-color: var(--accent); border-left-color: transparent; }
+    .nav-icon { font-size: 20px; width: auto; }
+    .main { margin-left: 0; margin-bottom: 56px; padding: 16px 12px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr; }
+    .pos-wrap { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-card { padding: 12px; }
+    .stat-value { font-size: 20px; }
+    .stat-label { font-size: 10px; }
+    .page-title { font-size: 18px; }
+    .page-sub { font-size: 12px; }
+    .card { padding: 14px; }
+    .card-title { font-size: 11px; }
+    .item-row { grid-template-columns: 1fr 44px 70px 44px; gap: 4px; }
+    .tab-btn { padding: 8px 10px; font-size: 11px; flex: 1; text-align: center; justify-content: center; }
+    .btn { min-height: 46px; }
+    .input-field { min-height: 46px; font-size: 16px; }
+    .login-card { width: 98vw; padding: 24px 16px; border-radius: 12px; }
+    .login-logo { font-size: 18px; }
+    th { font-size: 10px; padding: 6px 8px; }
+    td { padding: 8px 8px; font-size: 12px; }
+    .pos-cart-item { flex-wrap: wrap; gap: 6px; }
+    .help-step { gap: 10px; }
+    .help-num { width: 26px; height: 26px; font-size: 12px; flex-shrink: 0; }
+    .forecast-pill { font-size: 11px; padding: 5px 10px; }
+    .modal { width: 95vw; padding: 20px 16px; }
+  }
+  @media (max-width: 380px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .nav-item span:not(.nav-icon) { display: none; }
+    .nav-item { min-width: 44px; }
   }
 `;
 
@@ -617,7 +685,7 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
   const [iDate, setIDate] = useState(new Date().toISOString().slice(0, 10));
   const [iTime, setITime] = useState("");
   const [iNote, setINote] = useState("");
-  const [items, setItems] = useState([{ search: "", product: null, qty: 1, price: 0 }]);
+  const [items, setItems] = useState([{ search: "", product: null, qty: 1, price: 0, priceStr: "" }]);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState(null);
   const fileRef = useRef();
@@ -634,10 +702,10 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
   const [pwModal, setPwModal] = useState(null); // { action: 'edit'|'delete', sale }
 
   const iTotal = items.reduce((s, i) => s + (i.product ? i.qty * i.price : 0), 0);
-  const addItem = () => setItems([...items, { search: "", product: null, qty: 1, price: 0 }]);
+  const addItem = () => setItems([...items, { search: "", product: null, qty: 1, price: 0, priceStr: "" }]);
   const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
   const updateItem = (idx, changes) => setItems(items.map((it, i) => i === idx ? { ...it, ...changes } : it));
-  const selectProduct = (idx, prod) => updateItem(idx, { search: prod.name, product: prod, price: prod.price, qty: 1 });
+  const selectProduct = (idx, prod) => updateItem(idx, { search: prod.name, product: prod, price: prod.price, priceStr: String(prod.price), qty: 1 });
 
   const submitQuick = async () => {
     if (!qForm.amount || isNaN(qForm.amount) || Number(qForm.amount) <= 0) return setMsg({ type: "error", text: "Enter a valid sales amount (₱)." });
@@ -893,7 +961,7 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
                   <div key={idx} className="item-row">
                     <ProductSearch products={products} value={item.search} onChange={(v) => updateItem(idx, { search: v, product: null })} onSelect={(p) => selectProduct(idx, p)} />
                     <input className="input-field" type="number" min="1" value={item.qty} onChange={(e) => updateItem(idx, { qty: Math.max(1, parseInt(e.target.value) || 1) })} style={{ padding: "11px 8px", textAlign: "center" }} />
-                    <input className="input-field" type="number" value={item.price} onChange={(e) => updateItem(idx, { price: parseFloat(e.target.value) || 0 })} style={{ padding: "11px 8px" }} />
+                    <input className="input-field" type="text" inputMode="decimal" value={item.priceStr} placeholder="Price" onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) updateItem(idx, { priceStr: v, price: v === "" ? 0 : parseFloat(v) || 0 }); }} style={{ padding: "11px 8px" }} />
                     <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, color: "var(--accent)", fontSize: 14, textAlign: "right" }}>₱{(item.qty * item.price).toLocaleString()}</div>
                     <button className="btn btn-danger" style={{ padding: "8px 10px", fontSize: 14 }} onClick={() => removeItem(idx)}>✕</button>
                   </div>
