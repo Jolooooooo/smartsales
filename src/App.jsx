@@ -461,7 +461,12 @@ function LoginPage({ onLogin }) {
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function Dashboard({ sales, products }) {
-  const history = sales.map(s => ({ date: s.date, actual: s.amount }));
+  // Group sales by date and sum amounts for accurate forecast
+  const salesByDate = sales.reduce((acc, s) => {
+    acc[s.date] = (acc[s.date] || 0) + (s.amount || 0);
+    return acc;
+  }, {});
+  const history = Object.entries(salesByDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, actual]) => ({ date: new Date(date).toLocaleDateString("en-PH", { month: "short", day: "numeric" }), actual }));
   const { chartData, slope } = buildChartData(history, 7);
   const trending = slope >= 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -685,7 +690,7 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
   const [iDate, setIDate] = useState(new Date().toISOString().slice(0, 10));
   const [iTime, setITime] = useState("");
   const [iNote, setINote] = useState("");
-  const [items, setItems] = useState([{ search: "", product: null, qty: 1, price: 0, priceStr: "" }]);
+  const [items, setItems] = useState([{ search: "", product: null, qty: 1, qtyStr: "1", price: 0, priceStr: "" }]);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState(null);
   const fileRef = useRef();
@@ -702,10 +707,10 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
   const [pwModal, setPwModal] = useState(null); // { action: 'edit'|'delete', sale }
 
   const iTotal = items.reduce((s, i) => s + (i.product ? i.qty * i.price : 0), 0);
-  const addItem = () => setItems([...items, { search: "", product: null, qty: 1, price: 0, priceStr: "" }]);
+  const addItem = () => setItems([...items, { search: "", product: null, qty: 1, qtyStr: "1", price: 0, priceStr: "" }]);
   const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
   const updateItem = (idx, changes) => setItems(items.map((it, i) => i === idx ? { ...it, ...changes } : it));
-  const selectProduct = (idx, prod) => updateItem(idx, { search: prod.name, product: prod, price: prod.price, priceStr: String(prod.price), qty: 1 });
+  const selectProduct = (idx, prod) => updateItem(idx, { search: prod.name, product: prod, price: prod.price, priceStr: String(prod.price), qty: 1, qtyStr: "1" });
 
   const submitQuick = async () => {
     if (!qForm.amount || isNaN(qForm.amount) || Number(qForm.amount) <= 0) return setMsg({ type: "error", text: "Enter a valid sales amount (₱)." });
@@ -841,7 +846,12 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
     setTimeout(() => setMsg(null), 3000);
   };
 
-  const history = sales.map(s => ({ date: s.date, actual: s.amount }));
+  // Group sales by date and sum amounts for accurate forecast
+  const salesByDate = sales.reduce((acc, s) => {
+    acc[s.date] = (acc[s.date] || 0) + (s.amount || 0);
+    return acc;
+  }, {});
+  const history = Object.entries(salesByDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, actual]) => ({ date: new Date(date).toLocaleDateString("en-PH", { month: "short", day: "numeric" }), actual }));
   const { chartData, slope } = buildChartData(history, 30);
   const trending = slope >= 0;
 
@@ -960,7 +970,7 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
                 {items.map((item, idx) => (
                   <div key={idx} className="item-row">
                     <ProductSearch products={products} value={item.search} onChange={(v) => updateItem(idx, { search: v, product: null })} onSelect={(p) => selectProduct(idx, p)} />
-                    <input className="input-field" type="number" min="1" value={item.qty} onChange={(e) => updateItem(idx, { qty: Math.max(1, parseInt(e.target.value) || 1) })} style={{ padding: "11px 8px", textAlign: "center" }} />
+                    <input className="input-field" type="text" inputMode="numeric" value={item.qtyStr} placeholder="Qty" onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*$/.test(v)) updateItem(idx, { qtyStr: v, qty: v === "" ? 0 : parseInt(v) || 0 }); }} onBlur={(e) => { if (!e.target.value || e.target.value === "0") updateItem(idx, { qtyStr: "1", qty: 1 }); }} style={{ padding: "11px 8px", textAlign: "center" }} />
                     <input className="input-field" type="text" inputMode="decimal" value={item.priceStr} placeholder="Price" onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) updateItem(idx, { priceStr: v, price: v === "" ? 0 : parseFloat(v) || 0 }); }} style={{ padding: "11px 8px" }} />
                     <div style={{ fontFamily: "var(--font-h)", fontWeight: 700, color: "var(--accent)", fontSize: 14, textAlign: "right" }}>₱{(item.qty * item.price).toLocaleString()}</div>
                     <button className="btn btn-danger" style={{ padding: "8px 10px", fontSize: 14 }} onClick={() => removeItem(idx)}>✕</button>
@@ -1087,7 +1097,12 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
 // ── FORECAST ──────────────────────────────────────────────────────────────────
 function ForecastPage({ sales }) {
   const [period, setPeriod] = useState(7);
-  const history = sales.map(s => ({ date: s.date, actual: s.amount }));
+  // Group sales by date and sum amounts for accurate forecast
+  const salesByDate = sales.reduce((acc, s) => {
+    acc[s.date] = (acc[s.date] || 0) + (s.amount || 0);
+    return acc;
+  }, {});
+  const history = Object.entries(salesByDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, actual]) => ({ date: new Date(date).toLocaleDateString("en-PH", { month: "short", day: "numeric" }), actual }));
   const { chartData, slope } = buildChartData(history, period);
   const trending = slope >= 0;
   const lastActual = history[history.length - 1]?.actual || 0;
