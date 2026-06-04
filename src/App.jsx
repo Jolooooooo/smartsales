@@ -1097,7 +1097,9 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
 // ── FORECAST ──────────────────────────────────────────────────────────────────
 function ForecastPage({ sales }) {
   const [period, setPeriod] = useState(7);
-  // Group sales by date and sum amounts for accurate forecast
+  const [statsPeriod, setStatsPeriod] = useState(7);
+
+  // Group all sales by date
   const salesByDate = sales.reduce((acc, s) => {
     acc[s.date] = (acc[s.date] || 0) + (s.amount || 0);
     return acc;
@@ -1108,29 +1110,129 @@ function ForecastPage({ sales }) {
   const lastActual = history[history.length - 1]?.actual || 0;
   const predicted = Math.max(0, Math.round(lastActual + slope * period));
 
+  // Statistics helpers
+  const calcStats = (amounts) => {
+    if (!amounts.length) return { total: 0, mean: 0, median: 0, highest: 0, lowest: 0, count: 0 };
+    const total = amounts.reduce((a, b) => a + b, 0);
+    const mean = total / amounts.length;
+    const sorted = [...amounts].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    return { total, mean, median, highest: Math.max(...amounts), lowest: Math.min(...amounts), count: amounts.length };
+  };
+
+  // Get daily totals for selected stats period
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - statsPeriod);
+  const filteredDaily = Object.entries(salesByDate)
+    .filter(([date]) => new Date(date) >= cutoff)
+    .map(([, amount]) => amount);
+
+  // Get individual transactions for selected stats period
+  const filteredTxn = sales
+    .filter(s => new Date(s.date) >= cutoff)
+    .map(s => s.amount || 0);
+
+  const dailyStats = calcStats(filteredDaily);
+  const txnStats = calcStats(filteredTxn);
+
   if (sales.length < 3) return (
     <div>
-      <div className="page-header"><div className="page-title">Sales Forecast</div></div>
-      <div className="card"><div className="empty-state"><div className="empty-icon">📈</div><div className="empty-title">Not enough data yet</div><div className="empty-sub">Add at least 3 days of sales records to generate a forecast.</div></div></div>
+      <div className="page-header"><div className="page-title">Sales Forecast & Statistics</div></div>
+      <div className="card"><div className="empty-state"><div className="empty-icon">📈</div><div className="empty-title">Not enough data yet</div><div className="empty-sub">Add at least 3 days of sales records to generate a forecast and statistics.</div></div></div>
     </div>
   );
 
   return (
     <div>
-      <div className="page-header"><div className="page-title">Sales Forecast</div><div className="page-sub">Predicted trend based on your last 14 days of sales</div></div>
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 28 }}>
-        <div className="stat-card"><div className="stat-label">Trend direction</div><div className="stat-value" style={{ color: trending ? "var(--accent2)" : "var(--danger)", fontSize: 22 }}>{trending ? "Going UP ↑" : "Going DOWN ↓"}</div></div>
-        <div className="stat-card"><div className="stat-label">Slope (per day)</div><div className="stat-value" style={{ fontSize: 24 }}>₱{Math.abs(slope).toFixed(0)}</div><div className={`stat-badge ${trending ? "badge-up" : "badge-down"}`}>{trending ? "gaining" : "losing"} per day avg</div></div>
-        <div className="stat-card"><div className="stat-label">Predicted in {period} days</div><div className="stat-value" style={{ color: "var(--accent)", fontSize: 24 }}>₱{predicted.toLocaleString()}</div></div>
+      <div className="page-header"><div className="page-title">Sales Forecast & Statistics</div><div className="page-sub">Predicted trend and sales analysis</div></div>
+
+      {/* ── STATISTICS ── */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <div className="card-title" style={{ marginBottom: 2 }}>📊 Sales Statistics</div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>{filteredDaily.length} days · {filteredTxn.length} transactions</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[7, 14, 30].map(d => (
+              <button key={d} className={`btn ${statsPeriod === d ? "btn-primary" : "btn-secondary"}`} style={{ padding: "7px 16px", fontSize: 12 }} onClick={() => setStatsPeriod(d)}>Last {d} days</button>
+            ))}
+          </div>
+        </div>
+
+        {filteredDaily.length === 0 ? (
+          <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "16px 0" }}>No sales in the last {statsPeriod} days.</div>
+        ) : (
+          <>
+            {/* Daily statistics */}
+            <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Daily Totals</div>
+            <div className="stats-grid" style={{ marginBottom: 20 }}>
+              <div className="stat-card">
+                <div className="stat-label">Total Sales</div>
+                <div className="stat-value" style={{ color: "var(--accent)", fontSize: 22 }}>₱{dailyStats.total.toLocaleString()}</div>
+                <div className="stat-badge badge-neutral">Last {statsPeriod} days</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Mean (Average/Day)</div>
+                <div className="stat-value" style={{ fontSize: 22 }}>₱{dailyStats.mean.toFixed(2)}</div>
+                <div className="stat-badge badge-neutral">Sum ÷ {dailyStats.count} days</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Median (Daily)</div>
+                <div className="stat-value" style={{ fontSize: 22 }}>₱{dailyStats.median.toFixed(2)}</div>
+                <div className="stat-badge badge-neutral">Middle value</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Highest Day</div>
+                <div className="stat-value" style={{ color: "var(--accent2)", fontSize: 22 }}>₱{dailyStats.highest.toLocaleString()}</div>
+                <div className="stat-badge badge-up">Best day</div>
+              </div>
+            </div>
+
+            {/* Transaction statistics */}
+            <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Per Transaction ({txnStats.count} total)</div>
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-label">Transaction Mean</div>
+                <div className="stat-value" style={{ fontSize: 22 }}>₱{txnStats.mean.toFixed(2)}</div>
+                <div className="stat-badge badge-neutral">Avg per sale</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Transaction Median</div>
+                <div className="stat-value" style={{ fontSize: 22 }}>₱{txnStats.median.toFixed(2)}</div>
+                <div className="stat-badge badge-neutral">Middle transaction</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Highest Transaction</div>
+                <div className="stat-value" style={{ color: "var(--accent2)", fontSize: 22 }}>₱{txnStats.highest.toLocaleString()}</div>
+                <div className="stat-badge badge-up">Largest sale</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Lowest Transaction</div>
+                <div className="stat-value" style={{ color: "var(--danger)", fontSize: 22 }}>₱{txnStats.lowest.toLocaleString()}</div>
+                <div className="stat-badge badge-down">Smallest sale</div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
+
+      {/* ── FORECAST ── */}
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 24 }}>
+        <div className="stat-card"><div className="stat-label">Trend Direction</div><div className="stat-value" style={{ color: trending ? "var(--accent2)" : "var(--danger)", fontSize: 20 }}>{trending ? "Going UP ↑" : "Going DOWN ↓"}</div></div>
+        <div className="stat-card"><div className="stat-label">Slope (per day)</div><div className="stat-value" style={{ fontSize: 22 }}>₱{Math.abs(slope).toFixed(2)}</div><div className={`stat-badge ${trending ? "badge-up" : "badge-down"}`}>{trending ? "gaining" : "losing"} per day</div></div>
+        <div className="stat-card"><div className="stat-label">Predicted in {period} days</div><div className="stat-value" style={{ color: "var(--accent)", fontSize: 22 }}>₱{predicted.toLocaleString()}</div></div>
+      </div>
+
       <div className="card">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <div className="card-title" style={{ marginBottom: 0 }}>Forecast chart</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+          <div className="card-title" style={{ marginBottom: 0 }}>📈 Forecast Chart</div>
           <div style={{ display: "flex", gap: 8 }}>
             {[7, 14, 30].map((d) => <button key={d} className={`btn ${period === d ? "btn-primary" : "btn-secondary"}`} style={{ padding: "7px 16px", fontSize: 12 }} onClick={() => setPeriod(d)}>{d} days</button>)}
           </div>
         </div>
-        <div className={`forecast-pill ${trending ? "fp-up" : "fp-down"}`}>{trending ? `📈 Expected to GROW by ₱${(slope * period).toFixed(0)} over next ${period} days` : `📉 Expected to DROP by ₱${Math.abs(slope * period).toFixed(0)} over next ${period} days`}</div>
+        <div className={`forecast-pill ${trending ? "fp-up" : "fp-down"}`}>{trending ? `📈 Expected to GROW by ₱${(slope * period).toFixed(2)} over next ${period} days` : `📉 Expected to DROP by ₱${Math.abs(slope * period).toFixed(2)} over next ${period} days`}</div>
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
