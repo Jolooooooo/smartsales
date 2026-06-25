@@ -786,7 +786,8 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
           return {
             date: normalDate,
             amount: Number(String(r.amount || r.Amount || r.AMOUNT || r.sales || r.Sales || 0).replace(/[^0-9.]/g, "")),
-            time: r.time || r.Time || ""
+            time: r.time || r.Time || "",
+            note: r.note || r.Note || r.NOTE || ""
           };
         }).filter(r => r.date && r.amount > 0);
         if (!parsed.length) return setMsg({ type: "error", text: "No valid rows found. Make sure columns are: date, amount, time." });
@@ -812,8 +813,8 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([["date", "amount", "time"]]);
-    ws["!cols"] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }];
+    const ws = XLSX.utils.aoa_to_sheet([["date", "amount", "time", "note"]]);
+    ws["!cols"] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 25 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sales");
     XLSX.writeFile(wb, "smartsales_template.xlsx");
@@ -1038,6 +1039,7 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
                             <td style={{ color: "var(--muted)" }}>{r.date}</td>
                             <td style={{ color: "var(--muted)" }}>{r.time || "—"}</td>
                             <td style={{ fontFamily: "var(--font-h)", fontWeight: 700, color: "var(--accent)" }}>₱{r.amount.toLocaleString()}</td>
+                            <td style={{ color: "var(--muted)", fontSize: 12 }}>{r.note || "—"}</td>
                           </tr>
                         ))}
                       </tbody>
