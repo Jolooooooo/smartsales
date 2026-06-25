@@ -1280,7 +1280,7 @@ function ForecastPage({ sales }) {
 }
 
 // ── INVENTORY ─────────────────────────────────────────────────────────────────
-function Inventory({ products, onUpdate, userId }) {
+function Inventory({ products, onUpdate, userId, isOwner, recordPin }) {
   const [scanCode, setScanCode] = useState("");
   const [scanFocus, setScanFocus] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -1291,6 +1291,45 @@ function Inventory({ products, onUpdate, userId }) {
   const [newProd, setNewProd] = useState({ barcode: "", name: "", price: "", stock: "", unit: "pc", low_threshold: 10, expiry_date: "" });
   const [bulkRows, setBulkRows] = useState(Array(3).fill(null).map(() => ({ barcode: "", name: "", price: "", stock: "", unit: "pc", low_threshold: 10, expiry_date: "" })));
   const UNITS = ["pc","pack","bottle","sachet","stick","box","can","kg","g"];
+  // Inventory PIN modal state
+  const [invPwModal, setInvPwModal] = useState(false);
+  const [invPwInput, setInvPwInput] = useState("");
+  const [invPwErr, setInvPwErr] = useState("");
+  const [invShowPw, setInvShowPw] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null); // { type, payload }
+
+  const requirePin = (action) => {
+    if (isOwner) { executeAction(action); return; }
+    if (!recordPin) { alert("No record protection password set. Ask the owner to set one first."); return; }
+    setPendingAction(action);
+    setInvPwInput(""); setInvPwErr(""); setInvPwModal(true);
+  };
+
+  const confirmPin = () => {
+    if (invPwInput !== recordPin) { setInvPwErr("Wrong password. Try again."); return; }
+    setInvPwModal(false);
+    executeAction(pendingAction);
+    setPendingAction(null);
+  };
+
+  const executeAction = async (action) => {
+    if (!action) return;
+    if (action.type === "adjustStock") {
+      const { prod, delta } = action.payload;
+      const newStock = Math.max(0, prod.stock + delta);
+      await supabase.from("products").update({ stock: newStock }).eq("id", prod.id);
+      onUpdate(products.map((p) => p.id === prod.id ? { ...p, stock: newStock } : p));
+    } else if (action.type === "saveEdit") {
+      const { prod, qty } = action.payload;
+      await supabase.from("products").update({ stock: qty }).eq("id", prod.id);
+      onUpdate(products.map((p) => p.id === prod.id ? { ...p, stock: qty } : p));
+      setEditId(null);
+    } else if (action.type === "deleteProduct") {
+      const { prod } = action.payload;
+      await supabase.from("products").delete().eq("id", prod.id);
+      onUpdate(products.filter(p => p.id !== prod.id));
+    }
+  };
 
   const handleScan = useCallback(async (code) => {
     if (!code.trim()) return;
@@ -1307,26 +1346,9 @@ function Inventory({ products, onUpdate, userId }) {
     setTimeout(() => setFeedback(null), 4000);
   }, [products, onUpdate]);
 
-  const adjustStock = async (prod, delta) => {
-    const newStock = Math.max(0, prod.stock + delta);
-    await supabase.from("products").update({ stock: newStock }).eq("id", prod.id);
-    onUpdate(products.map((p) => p.id === prod.id ? { ...p, stock: newStock } : p));
-  };
-
-  const saveEdit = async (prod) => {
-    const qty = parseInt(editQty);
-    if (isNaN(qty) || qty < 0) return;
-    await supabase.from("products").update({ stock: qty }).eq("id", prod.id);
-    onUpdate(products.map((p) => p.id === prod.id ? { ...p, stock: qty } : p));
-    setEditId(null);
-  };
-
-  const deleteProduct = async (prod) => {
-    if (!window.confirm(`Delete "${prod.name}"?`)) return;
-    await supabase.from("products").delete().eq("id", prod.id);
-    onUpdate(products.filter(p => p.id !== prod.id));
-  };
-
+  const adjustStock = (prod, delta) => requirePin({ type: "adjustStock", payload: { prod, delta } });
+  const saveEdit = (prod) => { const qty = parseInt(editQty); if (isNaN(qty) || qty < 0) return; requirePin({ type: "saveEdit", payload: { prod, qty } }); };
+  const deleteProduct = (prod) => { if (!window.confirm(`Delete "${prod.name}"?`)) return; requirePin({ type: "deleteProduct", payload: { prod } }); };
   const addSingleProduct = async () => {
     if (!newProd.name) return;
     setSaving(true);
@@ -1338,7 +1360,6 @@ function Inventory({ products, onUpdate, userId }) {
     setNewProd({ barcode: "", name: "", price: "", stock: "", unit: "pc", low_threshold: 10, expiry_date: "" });
     setAddMode("none");
   };
-
   const addBulkProducts = async () => {
     const valid = bulkRows.filter(r => r.name.trim());
     if (!valid.length) return;
@@ -1364,6 +1385,30 @@ function Inventory({ products, onUpdate, userId }) {
   return (
     <div>
       <div className="page-header"><div className="page-title">Inventory</div><div className="page-sub">Scan barcodes or manage stock manually</div></div>
+
+      {/* PIN Modal for employees */}
+      {invPwModal && (
+        <div className="modal-overlay" onClick={() => setInvPwModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">🔐 Inventory Access</div>
+            <div className="modal-sub">Enter the record protection password to make changes to inventory.</div>
+            <div className="input-group" style={{ marginTop: 16 }}>
+              <label className="input-label">Record protection password</label>
+              <div style={{ position: "relative" }}>
+                <input className="input-field" type={invShowPw ? "text" : "password"} placeholder="••••••••" value={invPwInput}
+                  onChange={e => { setInvPwInput(e.target.value); setInvPwErr(""); }}
+                  onKeyDown={e => e.key === "Enter" && confirmPin()} autoFocus style={{ paddingRight: 44 }} />
+                <button type="button" onClick={() => setInvShowPw(!invShowPw)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", fontSize: 16, padding: 4 }}>{invShowPw ? "🙈" : "👁️"}</button>
+              </div>
+            </div>
+            {invPwErr && <div className="alert alert-error">{invPwErr}</div>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn btn-primary" onClick={confirmPin}>Confirm →</button>
+              <button className="btn btn-secondary" onClick={() => setInvPwModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(expiredCount > 0 || expiringSoon > 0) && (
         <div style={{ marginBottom: 20 }}>
@@ -1989,7 +2034,7 @@ export default function App() {
           {page === "pos" && <POSPage products={products} onUpdateProducts={setProducts} onAddSale={(s) => setSales([...sales, s])} userId={user.ownerId || user.id} />}
           {page === "sales" && <SalesEntry sales={sales} onAdd={(s) => setSales([...sales, s])} onUpdate={handleUpdateSale} onDelete={handleDeleteSale} userId={user.ownerId || user.id} products={products} onUpdateProducts={setProducts} recordPin={recordPin} isOwner={userRole === "owner"} />}
           {page === "forecast" && <ForecastPage sales={sales} />}
-          {page === "inventory" && <Inventory products={products} onUpdate={setProducts} userId={user.ownerId || user.id} />}
+          {page === "inventory" && <Inventory products={products} onUpdate={setProducts} userId={user.ownerId || user.id} isOwner={userRole === "owner"} recordPin={recordPin} />}
           
           {page === "employees" && userRole === "owner" && <ManageEmployees user={user} />}
           {page === "settings" && userRole === "owner" && <SettingsPage user={user} recordPin={recordPin} onPinChange={setRecordPin} />}
