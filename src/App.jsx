@@ -747,21 +747,51 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
     setTimeout(() => setMsg(null), 4000);
   };
 
+  const normalizeDate = (raw) => {
+    if (!raw) return "";
+    const s = String(raw).trim();
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // Excel serial number (e.g. 46000)
+    if (/^\d{5}$/.test(s)) {
+      const d = new Date((parseInt(s) - 25569) * 86400 * 1000);
+      return d.toISOString().slice(0, 10);
+    }
+    // MM/DD/YYYY or M/D/YYYY
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+      const [m, d, y] = s.split("/");
+      return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+    }
+    // DD/MM/YYYY
+    if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(s)) {
+      const [d, m, y] = s.split("/");
+      return `20${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+    }
+    // Try native Date parse as fallback
+    const dt = new Date(s);
+    if (!isNaN(dt)) return dt.toISOString().slice(0, 10);
+    return s;
+  };
+
   const parseFile = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const wb = XLSX.read(e.target.result, { type: "binary" });
+        const wb = XLSX.read(e.target.result, { type: "binary", cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-        const parsed = rows.map(r => ({
-          date: r.date || r.Date || r.DATE || "",
-          amount: Number(r.amount || r.Amount || r.AMOUNT || r.sales || r.Sales || 0),
-          time: r.time || r.Time || ""
-        })).filter(r => r.date && r.amount > 0);
-        if (!parsed.length) return setMsg({ type: "error", text: "No valid rows found. Make sure your file has 'date' and 'amount' columns." });
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
+        const parsed = rows.map(r => {
+          const rawDate = r.date || r.Date || r.DATE || "";
+          const normalDate = normalizeDate(rawDate);
+          return {
+            date: normalDate,
+            amount: Number(String(r.amount || r.Amount || r.AMOUNT || r.sales || r.Sales || 0).replace(/[^0-9.]/g, "")),
+            time: r.time || r.Time || ""
+          };
+        }).filter(r => r.date && r.amount > 0);
+        if (!parsed.length) return setMsg({ type: "error", text: "No valid rows found. Make sure columns are: date, amount, time." });
         setPreview(parsed); setTab("import");
-      } catch { setMsg({ type: "error", text: "Could not read file. Make sure it's a valid .xlsx or .csv file." }); }
+      } catch (err) { setMsg({ type: "error", text: "Could not read file. Make sure it's a valid .xlsx or .csv file." }); }
     };
     reader.readAsBinaryString(file);
   };
@@ -782,12 +812,8 @@ function SalesEntry({ sales, onAdd, onUpdate, onDelete, userId, products, onUpda
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      ["date", "amount", "time"],
-      ["2026-05-01", 2500, "09:00 AM"],
-      ["2026-05-02", 3100, ""],
-      ["2026-05-03", 1800, "02:30 PM"],
-    ]);
+    const ws = XLSX.utils.aoa_to_sheet([["date", "amount", "time"]]);
+    ws["!cols"] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sales");
     XLSX.writeFile(wb, "smartsales_template.xlsx");
